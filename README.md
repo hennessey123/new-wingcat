@@ -7,13 +7,13 @@ Eight worlds, eight levels each. One self-contained HTML file — no build step,
 no assets. Everything is drawn to canvas and the music is synthesized at runtime with the Web
 Audio API.
 
-**Play:** https://USERNAME.github.io/wingcat/
+**Play:** https://hennessey123.github.io/new-wingcat/
 
 ## Controls
 
 | Action | Keyboard | Touch |
 |---|---|---|
-| Move | Arrows / A D | Tilt the device, or slide the left pad |
+| Move | Arrows / A D | Tip the device forward or back, or slide the left pad |
 | Sprint | Hold L or Shift | SPRINT button |
 | Jump | Space / W / Up | Tap the screen |
 | Smash / dive | Down / S | SMASH button |
@@ -37,6 +37,9 @@ third that becomes a front flip, which goes higher than a normal jump.
 - **Rainbow world** — permanent wings, and the rainbow gaps only hold you while flying.
 
 ## Tilt steering
+
+Steering reads the device's pitch: tip the far edge of the phone down to run forward, pull it
+back toward you to reverse. Hold it flat to stand still.
 
 Motion sensors need two things: an HTTPS page, and a page that isn't inside an iframe. GitHub
 Pages satisfies both, so tilt works here. iOS will prompt for motion permission on the first
