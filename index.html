@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WingCat - Cat Simulator</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #111; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: 'Courier New', monospace; color: #fff; overflow: hidden; }
+  #gameCanvas { border: 3px solid #fff; display: block; image-rendering: pixelated; }
+  #ui { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 20px; font-size: 18px; text-shadow: 2px 2px #000; pointer-events: none; }
+  #instructions { position: absolute; bottom: 10px; font-size: 13px; text-shadow: 1px 1px #000; text-align: center; }
+</style>
+</head>
+<body>
+<canvas id="gameCanvas" width="800" height="450"></canvas>
+<div id="ui">
+  <span id="livesUI">❤️ 3</span>
+  <span id="worldUI">World 1</span>
+  <span id="levelUI">Level 1</span>
+  <span id="powerUI"></span>
+</div>
+<div id="instructions">← → Move &nbsp;|&nbsp; Space / ↑ Jump &nbsp;|&nbsp; Hold Space to Fly (when winged) &nbsp;|&nbsp; Hit mystery boxes with your head!</div>
+<script src="game.js"></script>
+</body>
+</html>
