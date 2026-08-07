@@ -88,6 +88,16 @@
   #touch div{opacity:0}
   #touch.tiltmode{grid-template-columns:1fr}
   #touch.tiltmode [data-k="left"],#touch.tiltmode [data-k="right"]{display:none}
+  #touch.slidemode{grid-template-columns:1fr 1fr}
+  #touch.slidemode [data-k="right"]{display:none}
+  #touch.slidemode [data-k="left"]{opacity:1;
+    background:linear-gradient(90deg,rgba(67,224,138,.10),rgba(67,224,138,0));
+    border-right:1px dashed rgba(255,255,255,.13)}
+  #padHint{position:fixed;left:0;width:50%;bottom:64px;text-align:center;z-index:9;
+    display:none;pointer-events:none;font-family:'Silkscreen',monospace;font-size:9px;
+    color:rgba(255,255,255,.42)}
+  #padHint.on{display:block}
+  #popOut{background:var(--sun);color:#120b1e;box-shadow:0 4px 0 #a3860d}
   #sprintBtn{position:fixed;left:14px;bottom:16px;z-index:9;display:none;
     font-size:11px;padding:14px 18px;background:#ffb020;color:#120b1e;box-shadow:0 4px 0 #a3700d}
   #sprintBtn.on{display:block}
@@ -104,6 +114,7 @@
   #tiltRow button.act{background:var(--leaf);color:#0a0612;box-shadow:0 4px 0 #1d7a49}
   #tiltNote{font-size:10px;color:#7c6b96;font-family:'Silkscreen',monospace;max-width:36ch}
   #tiltDiag{font-size:9px;color:#4d4165;font-family:monospace;letter-spacing:.02em}
+  .mlab{font-family:'Silkscreen',monospace;font-size:8px;color:#7c6b96}
   #tiltMeter{width:120px;height:8px;background:#2b1c3f;border:1px solid #4a3670;
     border-radius:8px;position:relative;overflow:hidden}
   #tiltNub{position:absolute;top:0;bottom:0;width:8px;background:var(--leaf);left:50%;
@@ -147,6 +158,7 @@
 <button id="sprintBtn">SPRINT</button>
 <button id="smashBtn">SMASH</button>
 <button id="recenterBtn">RECENTER TILT</button>
+<div id="padHint">SLIDE THIS SIDE TO STEER</div>
 
 <div id="rotate">
   <div class="ic">📱</div>
@@ -166,14 +178,17 @@
   <div id="tiltRow">
     <button class="ghost" id="btnTilt">TILT STEERING: OFF</button>
     <button class="ghost" id="btnInvert">INVERT</button>
+    <button id="popOut" style="display:none">OPEN IN FULL TAB</button>
+    <span class="mlab">BACK</span>
     <div id="tiltMeter"><div id="tiltDead"></div><div id="tiltNub"></div></div>
+    <span class="mlab">FWD</span>
   </div>
   <div id="tiltNote"></div>
   <div id="tiltDiag"></div>
   <div class="legend">
     <span>← → WALK</span><span>HOLD L SPRINT</span><span>SPACE JUMP / FLY</span>
     <span>↓ SMASH / DIVE</span><span>IN A PIT: HOLD INTO WALL + SPACE</span>
-    <span>ON PHONE: TILT TO STEER, TAP TO JUMP</span>
+    <span>ON PHONE: TIP FORWARD TO RUN, TAP TO JUMP</span>
   </div>
 </div>
 
@@ -372,13 +387,33 @@ addEventListener('keydown',e=>{
 });
 addEventListener('keyup',e=>{keys[e.key]=false;});
 const touch={left:false,right:false,jump:false,sprint:false,down:false};
-document.querySelectorAll('#touch div').forEach(d=>{
-  const k=d.dataset.k;
-  const on=e=>{e.preventDefault();touch[k]=true;};
-  const off=e=>{e.preventDefault();touch[k]=false;};
-  d.addEventListener('touchstart',on,{passive:false});
-  d.addEventListener('touchend',off,{passive:false});
-  d.addEventListener('touchcancel',off,{passive:false});
+const touchEl=document.getElementById('touch');
+const zone={}; document.querySelectorAll('#touch div').forEach(d=>zone[d.dataset.k]=d);
+const isSlide=()=>touchEl.classList.contains('slidemode');
+
+// slide pad: thumb down anywhere on the pad, then drag left/right to steer
+const SLIDE_DEAD=11;
+const slide={on:false,id:null,x0:0,dx:0};
+function slideDir(){ if(!slide.on) return 0;
+  return slide.dx>SLIDE_DEAD?1:(slide.dx<-SLIDE_DEAD?-1:0); }
+function slideEnd(){ slide.on=false; slide.id=null; slide.dx=0; }
+
+zone.left.addEventListener('touchstart',e=>{e.preventDefault();
+  if(isSlide()){ const t=e.changedTouches[0];
+    slide.on=true; slide.id=t.identifier; slide.x0=t.clientX; slide.dx=0; }
+  else touch.left=true; },{passive:false});
+zone.left.addEventListener('touchmove',e=>{e.preventDefault();
+  if(!slide.on) return;
+  for(const t of e.changedTouches) if(t.identifier===slide.id) slide.dx=t.clientX-slide.x0;
+},{passive:false});
+['touchend','touchcancel'].forEach(ev=>zone.left.addEventListener(ev,e=>{e.preventDefault();
+  touch.left=false; slideEnd(); },{passive:false}));
+
+[['right','right'],['jump','jump']].forEach(([k])=>{
+  const d=zone[k];
+  d.addEventListener('touchstart',e=>{e.preventDefault();touch[k]=true;},{passive:false});
+  ['touchend','touchcancel'].forEach(ev=>
+    d.addEventListener(ev,e=>{e.preventDefault();touch[k]=false;},{passive:false}));
 });
 const sprintBtn=document.getElementById('sprintBtn');
 const smashBtn=document.getElementById('smashBtn');
@@ -390,8 +425,8 @@ const recenterBtn=document.getElementById('recenterBtn');
 bindHold(sprintBtn,'sprint'); bindHold(smashBtn,'down');
 recenterBtn.addEventListener('click',e=>{e.preventDefault();recenter();});
 
-const L=()=>keys['ArrowLeft']||keys['a']||touch.left||tiltDir()<0;
-const R=()=>keys['ArrowRight']||keys['d']||touch.right||tiltDir()>0;
+const L=()=>keys['ArrowLeft']||keys['a']||touch.left||tiltDir()<0||slideDir()<0;
+const R=()=>keys['ArrowRight']||keys['d']||touch.right||tiltDir()>0||slideDir()>0;
 const J=()=>keys[' ']||keys['ArrowUp']||keys['w']||touch.jump;
 const SPR=()=>keys['l']||keys['L']||keys['Shift']||touch.sprint;
 const D=()=>keys['ArrowDown']||keys['s']||touch.down;
@@ -420,7 +455,8 @@ function onOrient(e){
   tilt.have=true; tilt.events++; tilt.src='deviceorientation'; tilt.status='live';
   tilt.raw={b:e.beta||0,g:e.gamma||0};
   const a=screenAngle()*Math.PI/180;
-  tilt.val = (e.gamma||0)*Math.cos(a) - (e.beta||0)*Math.sin(a);
+  // pitch: tip the far edge down to go forward, pull it back to reverse
+  tilt.val = (e.gamma||0)*Math.sin(a) + (e.beta||0)*Math.cos(a);
 }
 // fallback: some contexts expose motion but not orientation
 function onMotion(e){
@@ -429,10 +465,29 @@ function onMotion(e){
   if(tilt.src==='deviceorientation') return;      // prefer the real thing
   tilt.have=true; tilt.events++; tilt.src='devicemotion'; tilt.status='live';
   const a=screenAngle()*Math.PI/180;
-  const h=(g.x||0)*Math.cos(a)-(g.y||0)*Math.sin(a);
+  const v=(g.x||0)*Math.sin(a)+(g.y||0)*Math.cos(a);
   tilt.raw={b:g.y||0,g:g.x||0};
-  tilt.val = -h*9.17;                              // m/s^2 -> rough degrees
+  tilt.val = -v*9.17;                              // m/s^2 -> rough degrees
 }
+// third path: Generic Sensor API, available in some contexts the events aren't
+function trySensorAPI(){
+  const S = (typeof Gravity!=='undefined') ? Gravity
+          : (typeof Accelerometer!=='undefined') ? Accelerometer : null;
+  if(!S) return;
+  try{
+    const sn=new S({frequency:60});
+    sn.addEventListener('reading',()=>{
+      if(tilt.src==='deviceorientation') return;
+      tilt.have=true; tilt.events++; tilt.src='sensor-api'; tilt.status='live';
+      const a=screenAngle()*Math.PI/180;
+      tilt.raw={b:sn.y||0,g:sn.x||0};
+      tilt.val = -((sn.x||0)*Math.sin(a)+(sn.y||0)*Math.cos(a))*9.17;
+    });
+    sn.addEventListener('error',()=>{});
+    sn.start();
+  }catch(e){}
+}
+
 function tiltDir(){
   if(!tilt.on||!tilt.have) return 0;
   const v=(tilt.val-tilt.neutral)*(tilt.flip?-1:1);
@@ -454,6 +509,7 @@ async function enableTilt(){
     if(!tilt.bound){
       addEventListener('deviceorientation',onOrient);
       addEventListener('devicemotion',onMotion);
+      trySensorAPI();
       tilt.bound=true;
     }
     tilt.on=true; tilt.status='waiting';
@@ -468,24 +524,31 @@ function tiltUI(){
   saveTilt();
   const live = tilt.on && tilt.have;
   const b=document.getElementById('btnTilt'), b2=document.getElementById('btnTilt2');
-  b.textContent='TILT STEERING: '+(tilt.on?(live?'ON':'…'):'OFF');
-  b.classList.toggle('act',live);
-  b2.textContent='TILT: '+(tilt.on?(live?'ON':'…'):'OFF');
-  b2.classList.toggle('act',live);
+  b.textContent = !tilt.on ? 'STEERING: BUTTONS'
+    : live ? 'STEERING: TILT' : (tilt.status==='asking'||tilt.status==='waiting'
+      ? 'STEERING: …' : 'STEERING: SLIDE');
+  b.classList.toggle('act',tilt.on);
+  b2.textContent = !tilt.on ? 'STEER: BTN' : (live?'STEER: TILT':'STEER: SLIDE');
+  b2.classList.toggle('act',tilt.on);
   const inv=document.getElementById('btnInvert'), inv2=document.getElementById('btnInvert2');
   inv.classList.toggle('act',tilt.flip); inv2.classList.toggle('act',tilt.flip);
-  // ONLY hide the arrow zones once the sensor is actually delivering data
-  document.getElementById('touch').classList.toggle('tiltmode', live);
+  // sensor live -> tilt + full-screen jump. sensor absent -> slide pad + jump half.
+  const fallback = tilt.on && !live && tilt.status!=='asking' && tilt.status!=='waiting';
+  touchEl.classList.toggle('tiltmode', live);
+  touchEl.classList.toggle('slidemode', fallback);
+  document.getElementById('padHint').classList.toggle('on', fallback && G.mode==='play');
+  const po=document.getElementById('popOut');
+  po.style.display = (inFrame && /^https?:$/.test(location.protocol)) ? 'block' : 'none';
   const msg={
     off:      isTouch ? 'tap the left and right thirds of the screen to move'
                       : 'tilt needs a phone or tablet with a motion sensor',
     asking:   'waiting for motion permission…',
-    waiting:  'tilt on — lean the phone. arrows stay active until the sensor responds.',
-    live:     'lean to steer, tap anywhere to jump. steering backwards? hit invert.',
+    waiting:  'checking for a motion sensor…',
+    live:     'tip the phone forward to run forward, back to reverse. tap to jump. reversed? hit invert.',
     denied:   'motion access refused. reload and allow it, or use the arrow zones.',
-    'blocked-frame': 'no motion data: this page is inside a frame, which blocks sensors. open it in its own browser tab.',
-    'insecure':'no motion data: sensors need an https page. open the hosted link, not a local file.',
-    'no-sensor':'no motion data from this device. the arrow zones still work.'
+    'blocked-frame': 'sensors are blocked inside this frame — switched to slide steering. tap OPEN IN FULL TAB for real tilt.',
+    'insecure':'sensors need an https page — switched to slide steering.',
+    'no-sensor':'no motion sensor here — switched to slide steering.'
   };
   document.getElementById('tiltNote').textContent = msg[tilt.status]||msg.off;
   const d=document.getElementById('tiltDiag');
@@ -570,10 +633,11 @@ function startLevel(w,l){
   hud.classList.add('on');
   document.getElementById('meta').classList.toggle('on', !!W.meta);
   document.getElementById('touch').classList.add('on');
-  document.getElementById('touch').classList.toggle('tiltmode', tilt.on&&tilt.have);
+  tiltUI();
   sprintBtn.classList.add('on'); smashBtn.classList.add('on');
-  recenterBtn.classList.toggle('on', isTouch && tilt.on && tilt.have);
-  if(tilt.on) recenter();
+  recenterBtn.classList.toggle('on', tilt.on && tilt.have);
+  if(tilt.on&&tilt.have) recenter();
+  slideEnd();
   document.getElementById('hudTitle').textContent=W.name+' '+(w+1)+'-'+(l+1);
   panels.forEach(p=>p.classList.remove('on'));
   if(W.alwaysWings) musicOn(); else musicOff();
@@ -1120,7 +1184,8 @@ function lose(title,why){
   document.getElementById('loseWhy').textContent=why;
   hud.classList.remove('on'); document.getElementById('touch').classList.remove('on');
   sprintBtn.classList.remove('on'); smashBtn.classList.remove('on');
-  recenterBtn.classList.remove('on'); touch.sprint=false; touch.down=false;
+  recenterBtn.classList.remove('on'); document.getElementById('padHint').classList.remove('on');
+  touch.sprint=false; touch.down=false; slideEnd();
   document.getElementById('meta').classList.remove('on');
   show('pLose'); return true;
 }
@@ -1133,7 +1198,8 @@ function win(){
     `Fish collected ${G.coinsGot} of ${total}. The mouse is still back there somewhere.`;
   hud.classList.remove('on'); document.getElementById('touch').classList.remove('on');
   sprintBtn.classList.remove('on'); smashBtn.classList.remove('on');
-  recenterBtn.classList.remove('on'); touch.sprint=false; touch.down=false;
+  recenterBtn.classList.remove('on'); document.getElementById('padHint').classList.remove('on');
+  touch.sprint=false; touch.down=false; slideEnd();
   document.getElementById('meta').classList.remove('on');
   const last = G.world===7 && G.level===7;
   document.getElementById('btnNext').textContent = last?'FINISH':'NEXT LEVEL';
@@ -1183,8 +1249,12 @@ document.getElementById('btnTilt2').onclick=toggleTilt;
 document.getElementById('btnInvert').onclick=()=>{ tilt.flip=!tilt.flip; tiltUI(); };
 document.getElementById('btnInvert2').onclick=()=>{ tilt.flip=!tilt.flip; tiltUI(); };
 document.getElementById('btnRecenter2').onclick=recenter;
+document.getElementById('popOut').onclick=()=>{
+  try{ window.open(location.href,'_blank','noopener'); }catch(e){}
+};
 document.getElementById('tiltRow').style.display='flex';
 document.getElementById('tiltRow2').style.display='flex';
+if(isTouch){ tilt.on=true; tilt.status='waiting'; enableTilt(); }
 tiltUI();
 orientCheck();
 
