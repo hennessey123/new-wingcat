@@ -113,6 +113,9 @@
     color:#c3b6d9}
   #recenterBtn.on{display:block}
   #recenterBtn:active{transform:translateX(-50%) translateY(3px);box-shadow:0 0 0 #150e24}
+  #chaseRow{display:flex;gap:8px;align-items:center;justify-content:center}
+  #chaseRow button{font-size:10px;padding:10px 14px}
+  #chaseRow button.act{background:var(--sky);color:#0a0612;box-shadow:0 4px 0 #1d7ea6}
   #tiltRow{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;align-items:center}
   #tiltRow button{font-size:10px;padding:10px 14px}
   #tiltRow button.act{background:var(--leaf);color:#0a0612;box-shadow:0 4px 0 #1d7a49}
@@ -180,6 +183,11 @@
     <button id="btnStart">START</button>
     <button class="ghost" id="btnWipe">WIPE SAVE</button>
   </div>
+  <div id="chaseRow">
+    <span class="mlab">MOUSE</span>
+    <button class="ghost" id="btnChase">CHILL</button>
+    <span id="chaseNote" class="mlab"></span>
+  </div>
   <div id="tiltRow">
     <button class="ghost" id="btnTilt">TILT STEERING: OFF</button>
     <button class="ghost" id="btnInvert">INVERT</button>
@@ -222,6 +230,7 @@
     <button class="ghost" id="btnTilt2" style="font-size:10px;padding:10px 14px">TILT: OFF</button>
     <button class="ghost" id="btnInvert2" style="font-size:10px;padding:10px 14px">INVERT</button>
     <button class="ghost" id="btnRecenter2" style="font-size:10px;padding:10px 14px">RECENTER</button>
+    <button class="ghost" id="btnChase2" style="font-size:10px;padding:10px 14px">MOUSE: CHILL</button>
   </div>
   <div class="rowbtn">
     <button id="btnResume">RESUME</button>
@@ -292,6 +301,18 @@ const META_LINES = [
   'nothing past the goal has been drawn',
   'your input is polled, not felt'
 ];
+
+/* ============ CHASE PRESETS ============ */
+const CHASE={
+  chill:     {sp:0.55, dd:0.35, trail:1100, rate:0.008, name:'CHILL'},
+  normal:    {sp:2.15, dd:1.70, trail:330, rate:0.028, name:'NORMAL'},
+  relentless:{sp:2.90, dd:2.20, trail:240, rate:0.050, name:'RELENTLESS'}
+};
+const CHASE_KEYS=['chill','normal','relentless'];
+let chaseMode='chill';
+try{ const v=sessionStorage.getItem('wingcat-chase');
+     if(CHASE_KEYS.includes(v)) chaseMode=v; }catch(e){}
+const chase=()=>CHASE[chaseMode];
 
 /* ============ SAVE ============ */
 let save = {cleared:{}};
@@ -623,8 +644,7 @@ function genLevel(w,l){
   }
   if(W.needsSuit && !boxes.some(b=>b.kind==='suit')) boxes[0].kind='suit';
 
-  return {w,l,len,goal:x+230,plats,boxes,hazards,coins,gunners,GY,
-    mouseSpeed:2.15+diff*1.70, timeLimit:0};
+  return {w,l,len,goal:x+230,plats,boxes,hazards,coins,gunners,GY,diff,timeLimit:0};
 }
 
 /* ============ GAME STATE ============ */
@@ -640,7 +660,7 @@ function startLevel(w,l){
     face:1,anim:0,step:0,sprinting:false,
     wallL:false,wallR:false,wallSlide:false,wallDir:0,kick:0,kickVx:0,jPrev:false,
     rising:false,jumpFull:false,fullCombo:0,flip:false,flipAng:0,pound:false};
-  G.mouse={x:-260,y:G.lv.GY-52,w:64,h:52,anim:0,rear:false};
+  G.mouse={x:Math.min(-260, 60-chase().trail),y:G.lv.GY-52,w:64,h:52,anim:0,rear:false};
   G.mode='play';
   hud.classList.add('on');
   document.getElementById('meta').classList.toggle('on', !!W.meta);
@@ -894,12 +914,13 @@ function step_(){
   // mouse
   const m=G.mouse;
   m.anim+=0.28;
+  const CH=chase();
   const gap=c.x-(m.x+m.w);
-  let mspd=lv.mouseSpeed;
+  let mspd=CH.sp+lv.diff*CH.dd;
   if(gap<70) mspd*=0.78;                        // loses steam right as it closes in
   m.x += mspd;
-  const target=c.x-330;
-  if(m.x < target) m.x += (target-m.x)*0.028;   // gentler catch-up when you build a lead
+  const target=c.x-CH.trail;
+  if(m.x < target) m.x += (target-m.x)*CH.rate;
   m.y = lv.GY-52 + Math.sin(G.t*0.07)*3;
 
   // it only gets you if you're actually down in the bite zone
@@ -928,7 +949,7 @@ function step_(){
   G.cam=Math.max(0,Math.min(lv.goal-VW+120,G.cam));
 
   // chase bar
-  const dist=Math.max(0,Math.min(1,(c.x-(m.x+m.w))/280));
+  const dist=Math.max(0,Math.min(1,(c.x-(m.x+m.w))/Math.min(320,CH.trail)));
   const cf=document.getElementById('chaseFill');
   cf.style.width=(dist*100)+'%';
   cf.style.background = m.rear ? (G.t%12<6?'#ff3d9a':'#7a1440')
@@ -1298,6 +1319,25 @@ function openWorld(w){
   }
   show('pLevels');
 }
+
+function chaseUI(){
+  const b=document.getElementById('btnChase'), b2=document.getElementById('btnChase2');
+  b.textContent=chase().name; b.classList.toggle('act',chaseMode!=='normal');
+  b2.textContent='MOUSE: '+chase().name;
+  document.getElementById('chaseNote').textContent={
+    chill:'trails far behind, offscreen — not a threat',
+    normal:'a real race from world 7 on',
+    relentless:'sprint or die'
+  }[chaseMode];
+  try{ sessionStorage.setItem('wingcat-chase',chaseMode); }catch(e){}
+}
+function cycleChase(){
+  chaseMode=CHASE_KEYS[(CHASE_KEYS.indexOf(chaseMode)+1)%CHASE_KEYS.length];
+  chaseUI();
+}
+document.getElementById('btnChase').onclick=cycleChase;
+document.getElementById('btnChase2').onclick=cycleChase;
+chaseUI();
 
 function toggleTilt(){ if(tilt.on){ tilt.on=false; tiltUI(); } else enableTilt(); }
 document.getElementById('btnTilt').onclick=toggleTilt;
