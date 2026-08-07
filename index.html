@@ -114,6 +114,7 @@
   #tiltRow button.act{background:var(--leaf);color:#0a0612;box-shadow:0 4px 0 #1d7a49}
   #tiltNote{font-size:10px;color:#7c6b96;font-family:'Silkscreen',monospace;max-width:36ch}
   #tiltDiag{font-size:9px;color:#4d4165;font-family:monospace;letter-spacing:.02em}
+  .mlab{font-family:'Silkscreen',monospace;font-size:8px;color:#7c6b96}
   #tiltMeter{width:120px;height:8px;background:#2b1c3f;border:1px solid #4a3670;
     border-radius:8px;position:relative;overflow:hidden}
   #tiltNub{position:absolute;top:0;bottom:0;width:8px;background:var(--leaf);left:50%;
@@ -178,14 +179,16 @@
     <button class="ghost" id="btnTilt">TILT STEERING: OFF</button>
     <button class="ghost" id="btnInvert">INVERT</button>
     <button id="popOut" style="display:none">OPEN IN FULL TAB</button>
+    <span class="mlab">BACK</span>
     <div id="tiltMeter"><div id="tiltDead"></div><div id="tiltNub"></div></div>
+    <span class="mlab">FWD</span>
   </div>
   <div id="tiltNote"></div>
   <div id="tiltDiag"></div>
   <div class="legend">
     <span>← → WALK</span><span>HOLD L SPRINT</span><span>SPACE JUMP / FLY</span>
     <span>↓ SMASH / DIVE</span><span>IN A PIT: HOLD INTO WALL + SPACE</span>
-    <span>ON PHONE: TILT TO STEER, TAP TO JUMP</span>
+    <span>ON PHONE: TIP FORWARD TO RUN, TAP TO JUMP</span>
   </div>
 </div>
 
@@ -452,7 +455,8 @@ function onOrient(e){
   tilt.have=true; tilt.events++; tilt.src='deviceorientation'; tilt.status='live';
   tilt.raw={b:e.beta||0,g:e.gamma||0};
   const a=screenAngle()*Math.PI/180;
-  tilt.val = (e.gamma||0)*Math.cos(a) - (e.beta||0)*Math.sin(a);
+  // pitch: tip the far edge down to go forward, pull it back to reverse
+  tilt.val = (e.gamma||0)*Math.sin(a) + (e.beta||0)*Math.cos(a);
 }
 // fallback: some contexts expose motion but not orientation
 function onMotion(e){
@@ -461,9 +465,9 @@ function onMotion(e){
   if(tilt.src==='deviceorientation') return;      // prefer the real thing
   tilt.have=true; tilt.events++; tilt.src='devicemotion'; tilt.status='live';
   const a=screenAngle()*Math.PI/180;
-  const h=(g.x||0)*Math.cos(a)-(g.y||0)*Math.sin(a);
+  const v=(g.x||0)*Math.sin(a)+(g.y||0)*Math.cos(a);
   tilt.raw={b:g.y||0,g:g.x||0};
-  tilt.val = -h*9.17;                              // m/s^2 -> rough degrees
+  tilt.val = -v*9.17;                              // m/s^2 -> rough degrees
 }
 // third path: Generic Sensor API, available in some contexts the events aren't
 function trySensorAPI(){
@@ -477,7 +481,7 @@ function trySensorAPI(){
       tilt.have=true; tilt.events++; tilt.src='sensor-api'; tilt.status='live';
       const a=screenAngle()*Math.PI/180;
       tilt.raw={b:sn.y||0,g:sn.x||0};
-      tilt.val = -((sn.x||0)*Math.cos(a)-(sn.y||0)*Math.sin(a))*9.17;
+      tilt.val = -((sn.x||0)*Math.sin(a)+(sn.y||0)*Math.cos(a))*9.17;
     });
     sn.addEventListener('error',()=>{});
     sn.start();
@@ -540,7 +544,7 @@ function tiltUI(){
                       : 'tilt needs a phone or tablet with a motion sensor',
     asking:   'waiting for motion permission…',
     waiting:  'checking for a motion sensor…',
-    live:     'lean to steer, tap anywhere to jump. steering backwards? hit invert.',
+    live:     'tip the phone forward to run forward, back to reverse. tap to jump. reversed? hit invert.',
     denied:   'motion access refused. reload and allow it, or use the arrow zones.',
     'blocked-frame': 'sensors are blocked inside this frame — switched to slide steering. tap OPEN IN FULL TAB for real tilt.',
     'insecure':'sensors need an https page — switched to slide steering.',
