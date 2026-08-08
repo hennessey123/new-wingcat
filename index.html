@@ -113,6 +113,28 @@
     color:#c3b6d9}
   #recenterBtn.on{display:block}
   #recenterBtn:active{transform:translateX(-50%) translateY(3px);box-shadow:0 0 0 #150e24}
+  #netBox{display:none;flex-direction:column;gap:7px;align-items:center;
+    padding:12px 14px;border:1px solid #2f2150;border-radius:4px;background:#160f28}
+  .netrow{display:flex;gap:7px;align-items:center;flex-wrap:wrap;justify-content:center}
+  .netrow button{font-size:10px;padding:11px 15px}
+  #netInput{width:82px;padding:11px 8px;background:#0e0919;border:1px solid #4a3670;
+    color:#fff;font-family:'Silkscreen',monospace;font-size:14px;text-align:center;
+    letter-spacing:.18em;text-transform:uppercase;border-radius:3px}
+  #netInput:focus{outline:2px solid var(--sun);outline-offset:1px}
+  #netCode{display:none;font-family:'Silkscreen',monospace;font-size:30px;
+    letter-spacing:.3em;color:var(--sun);text-indent:.3em}
+  #netStatus{font-size:10px;font-family:'Silkscreen',monospace;color:#7c6b96;max-width:34ch;
+    line-height:1.6}
+  #netPing{position:fixed;top:8px;right:74px;z-index:11;display:none;
+    font-family:'Silkscreen',monospace;font-size:9px;color:#7c6b96}
+  #netPing.on{display:block}
+  #raceBars{display:none;flex-direction:column;gap:3px;margin:2px 0}
+  #raceBars.on{display:flex}
+  .rb{display:flex;align-items:center;gap:5px;font-size:9px}
+  .rb span{width:15px}
+  .rbt{width:120px;height:7px;background:#2b1c3f;border:1px solid #4a3670;border-radius:7px;overflow:hidden}
+  #pBar0{height:100%;width:0;background:#ffb84d}
+  #pBar1{height:100%;width:0;background:#c98cff}
   #chaseRow{display:flex;gap:8px;align-items:center;justify-content:center}
   #chaseRow button{font-size:10px;padding:10px 14px}
   #chaseRow button.act{background:var(--sky);color:#0a0612;box-shadow:0 4px 0 #1d7ea6}
@@ -154,12 +176,17 @@
 <div id="hud">
   <div id="hudL">
     <div id="hudTitle">CAT WORLD 1-1</div>
+    <div id="raceBars">
+      <div class="rb"><span>P1</span><div class="rbt"><div id="pBar0"></div></div></div>
+      <div class="rb"><span>P2</span><div class="rbt"><div id="pBar1"></div></div></div>
+    </div>
     <div id="chaseBar"><div id="chaseFill"></div></div>
     <div><span id="wingPill">WINGS</span> <span id="suitPill">SUIT</span> <span id="sprintPill">SPRINT</span> <span id="comboPill">MAX x1</span></div>
   </div>
   <div id="hudR"><button id="pauseBtn">II</button></div>
 </div>
 <div id="meta"></div>
+<div id="netPing"></div>
 
 <div id="touch"><div data-k="left"></div><div data-k="jump"></div><div data-k="right"></div></div>
 <button id="sprintBtn">SPRINT</button>
@@ -178,10 +205,25 @@
 <div class="panel on" id="pTitle">
   <div class="tiny">a cat, a mouse, a problem</div>
   <h1>WINGCAT</h1>
-  <p>Headbutt a mystery box, or smash it from above with Down — hold Down mid-flight to dive-bomb one — and a wing suit pops out — jump into it before it fades. Tap space for a hop, hold it for full height; two full jumps in a row arms a front flip. Hold L to sprint, stomp the gunners before they fire mice at you, and outrun a mouse the size of a bus. Fall in a pit? Hug a wall and kick off it.</p>
+  <p>One or two players on the same keyboard. Headbutt a mystery box, or smash it from above with Down — hold Down mid-flight to dive-bomb one — and a wing suit pops out — jump into it before it fades. Tap space for a hop, hold it for full height; two full jumps in a row arms a front flip. Hold L to sprint, stomp the gunners before they fire mice at you, and outrun a mouse the size of a bus. Fall in a pit? Hug a wall and kick off it.</p>
   <div class="rowbtn">
     <button id="btnStart">START</button>
     <button class="ghost" id="btnWipe">WIPE SAVE</button>
+  </div>
+  <div id="netBox">
+    <div class="netrow">
+      <button id="btnHost">HOST GAME</button>
+      <input id="netInput" maxlength="4" placeholder="CODE" autocomplete="off"
+             autocapitalize="characters" spellcheck="false">
+      <button class="ghost" id="btnJoin">JOIN</button>
+    </div>
+    <div id="netCode"></div>
+    <div id="netStatus"></div>
+  </div>
+  <div id="chaseRow" style="margin-bottom:-4px">
+    <span class="mlab">PLAYERS</span>
+    <button class="ghost" id="btnPlayers">1 — SOLO</button>
+    <span id="playersNote" class="mlab"></span>
   </div>
   <div id="chaseRow">
     <span class="mlab">MOUSE</span>
@@ -202,6 +244,8 @@
     <span>← → WALK</span><span>HOLD L SPRINT</span><span>SPACE JUMP / FLY</span>
     <span>↓ SMASH / DIVE</span><span>IN A PIT: HOLD INTO WALL + SPACE</span>
     <span>PHONE: TIP TO RUN, TIP MORE TO SPRINT, PULL BACK TO CROUCH</span>
+    <span>2 PLAYERS: P1 ARROWS+SHIFT · P2 WASD+Q</span>
+    <span>ONLINE: SHARE A 4-LETTER ROOM CODE</span>
   </div>
 </div>
 
@@ -459,6 +503,188 @@ const SPR=()=>keys['l']||keys['L']||keys['Shift']||touch.sprint||tiltSprint();
 const D=()=>keys['ArrowDown']||keys['s']||touch.down;          // air smash
 const CROUCH=()=>D()||tiltCrouch();                            // ground crouch
 
+/* ============ ONLINE PLAY (WebRTC data channel via PeerJS) ============ */
+// GitHub Pages can't host a server, so signalling goes through PeerJS's public
+// broker and the actual gameplay traffic is peer-to-peer.
+const PEER_SRC=[
+  'https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js',
+  'https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.5/peerjs.min.js'
+];
+const CODE_ALPHABET='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // no I/O/0/1
+const net={on:false,host:false,state:'off',code:'',err:'',peer:null,conn:null,
+           lastRx:0,ping:0,pkSeq:0,tries:0};
+
+function loadPeerLib(){
+  return new Promise((res,rej)=>{
+    if(window.Peer) return res();
+    let i=0;
+    const next=()=>{
+      if(i>=PEER_SRC.length) return rej(new Error('could not load the peer library — an ad blocker or offline network will do this'));
+      const sc=document.createElement('script');
+      sc.src=PEER_SRC[i++];
+      sc.onload=()=>window.Peer?res():next();
+      sc.onerror=next;
+      document.head.appendChild(sc);
+    };
+    next();
+  });
+}
+const roomId=c=>'wingcat-v1-'+c;
+const newCode=()=>Array.from({length:4},()=>CODE_ALPHABET[Math.floor(Math.random()*CODE_ALPHABET.length)]).join('');
+
+function netSet(st,err){ net.state=st; net.err=err||''; netUI(); }
+function peerErrText(e){
+  const t=(e&&e.type)||'';
+  return {'peer-unavailable':'no game found with that code — check it and try again',
+    'network':'lost contact with the matchmaking server',
+    'server-error':'the matchmaking server is down — try again later',
+    'unavailable-id':'that room code is taken',
+    'browser-incompatible':'this browser does not support peer connections',
+    'webrtc':'your network blocked the direct connection (strict NAT or firewall)'
+  }[t] || ('connection problem'+(t?' ('+t+')':''));
+}
+function bindConn(cn){
+  net.conn=cn;
+  cn.on('open',()=>{ net.tries=0; netSet('connected');
+    netSend({t:'hi',host:net.host}); });
+  cn.on('data',d=>{ try{ onNetMsg(d); }catch(e){} });
+  cn.on('close',()=>{ net.conn=null; netSet('dropped','the other player disconnected'); });
+  cn.on('error',e=>netSet('error',peerErrText(e)));
+}
+function killPeer(){
+  try{ if(net.conn) net.conn.close(); }catch(e){}
+  try{ if(net.peer) net.peer.destroy(); }catch(e){}
+  net.conn=null; net.peer=null;
+}
+async function hostGame(){
+  killPeer(); net.host=true; netSet('loading');
+  try{ await loadPeerLib(); }catch(e){ return netSet('error',e.message); }
+  net.code=newCode();
+  netSet('opening');
+  net.peer=new Peer(roomId(net.code),{debug:0});
+  net.peer.on('open',()=>netSet('waiting'));
+  net.peer.on('connection',cn=>bindConn(cn));
+  net.peer.on('error',e=>{
+    if(e&&e.type==='unavailable-id'&&net.tries++<5) return hostGame();
+    netSet('error',peerErrText(e));
+  });
+  net.peer.on('disconnected',()=>{ try{ net.peer.reconnect(); }catch(e){} });
+}
+async function joinGame(code){
+  code=(code||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,4);
+  if(code.length<4) return netSet('error','room codes are 4 characters');
+  killPeer(); net.host=false; net.code=code; netSet('loading');
+  try{ await loadPeerLib(); }catch(e){ return netSet('error',e.message); }
+  netSet('joining');
+  net.peer=new Peer({debug:0});
+  net.peer.on('open',()=>{
+    const cn=net.peer.connect(roomId(code),{reliable:true});
+    bindConn(cn);
+    setTimeout(()=>{ if(net.state==='joining') netSet('error','no answer — is the host still on the title screen?'); },12000);
+  });
+  net.peer.on('error',e=>netSet('error',peerErrText(e)));
+}
+function netSend(m){ if(net.conn&&net.conn.open){ try{ net.conn.send(m); }catch(e){} } }
+const netLive=()=>net.on&&net.state==='connected'&&net.conn&&net.conn.open;
+
+function onNetMsg(m){
+  net.lastRx=performance.now();
+  const lv=G.lv;
+  switch(m.t){
+    case 'hi': break;
+    case 'ping': netSend({t:'pong',s:m.s}); break;
+    case 'pong': net.ping=Math.round(performance.now()-m.s); break;
+    case 'start':                                   // host drives level choice
+      if(!net.host){ chaseMode=m.c||chaseMode; startLevel(m.w,m.l); }
+      break;
+    case 'cat': applyRemote(m); break;
+    case 'box': if(lv&&lv.boxes[m.i]&&!lv.boxes[m.i].hit){ lv.boxes[m.i].hit=true; lv.boxes[m.i].pop=12; } break;
+    case 'pk':  G.pickups.push({id:m.id,x:m.x,y:m.y,vx:m.vx,vy:-3.6,w:20,h:20,
+                  kind:m.k,life:m.k==='suit'?620:430,t:0,rest:m.r}); break;
+    case 'pkgo':{ const i=G.pickups.findIndex(q=>q.id===m.id); if(i>=0) G.pickups.splice(i,1); } break;
+    case 'gun': if(lv&&lv.gunners[m.i]) lv.gunners[m.i].dead=true; break;
+    case 'shot':G.bullets.push({x:m.x,y:m.y,vx:m.vx,vy:m.vy,w:13,h:9,anim:0}); break;
+    case 'mouse': if(!net.host&&G.mouse){ G.mouse.x=m.x; } break;
+    case 'sync':                                    // reconciliation: flags only ever go true
+      if(lv){
+        for(let i=0;i<lv.boxes.length;i++)
+          if(m.b[i]==='1'&&!lv.boxes[i].hit){ lv.boxes[i].hit=true; lv.boxes[i].pop=6; }
+        for(let i=0;i<lv.gunners.length;i++)
+          if(m.g[i]==='1') lv.gunners[i].dead=true;
+      }
+      break;
+    case 'win': if(G.mode==='play'){ const r=G.cats.find(c=>c.remote); if(r) finishRace(r); } break;
+    case 'dead': { const r=G.cats.find(c=>c.remote); if(r){ r.down=80; r.trail.length=0; } } break;
+    case 'bye': netSet('dropped','the other player left'); break;
+  }
+}
+function applyRemote(m){
+  if(!G.cats) return;
+  const r=G.cats.find(c=>c.remote); if(!r) return;
+  const lead=Math.max(0,Math.min(10,(net.ping/2)/16.7));   // half RTT, in frames
+  r.netX=m.x+m.vx*lead; r.netY=m.y+m.vy*lead*0.5;
+  if(r.first===undefined){ r.x=r.netX; r.y=r.netY; r.first=1; }
+  r.vx=m.vx; r.vy=m.vy; r.face=m.f;
+  r.wings=m.wt>0; r.wingT=m.wt; r.suit=!!m.s;
+  r.crouch=!!m.c; r.h=m.c?CH_CROUCH:CH_STAND;
+  r.flip=!!m.fl; r.flipAng=m.fa; r.pound=!!m.p;
+  r.ground=!!m.g; r.step=m.st; r.sprinting=!!m.sp;
+  r.wallSlide=!!m.ws; r.wallDir=m.wd; r.down=m.d;
+}
+function sendCat(c){
+  netSend({t:'cat',x:Math.round(c.x*4)/4,y:Math.round(c.y*4)/4,
+    vx:Math.round(c.vx*10)/10,vy:Math.round(c.vy*10)/10,f:c.face,
+    wt:c.wingT,s:c.suit?1:0,c:c.crouch?1:0,fl:c.flip?1:0,
+    fa:Math.round(c.flipAng*100)/100,p:c.pound?1:0,g:c.ground?1:0,
+    st:Math.round(c.step*100)/100,sp:c.sprinting?1:0,
+    ws:c.wallSlide?1:0,wd:c.wallDir,d:c.down});
+}
+
+function netUI(){
+  const box=document.getElementById('netBox'); if(!box) return;
+  box.style.display = players==='online' ? 'flex' : 'none';
+  const st=document.getElementById('netStatus');
+  const codeEl=document.getElementById('netCode');
+  const msg={
+    off:'host a game to get a room code, or join with a friend\u2019s',
+    loading:'loading the peer library\u2026',
+    opening:'opening a room\u2026',
+    waiting:'room open \u2014 give your friend the code',
+    joining:'connecting\u2026',
+    connected:'connected! the host picks the level.',
+    dropped:net.err, error:net.err
+  }[net.state]||'';
+  st.textContent=msg;
+  st.style.color = net.state==='error'||net.state==='dropped' ? '#ff7a8f'
+    : net.state==='connected' ? '#43e08a' : '#7c6b96';
+  codeEl.textContent = (net.host&&net.code&&(net.state==='waiting'||net.state==='connected')) ? net.code : '';
+  codeEl.style.display = codeEl.textContent ? 'block' : 'none';
+  const hb=document.getElementById('btnHost'), jb=document.getElementById('btnJoin');
+  const busy=['loading','opening','joining'].includes(net.state);
+  hb.disabled=busy; jb.disabled=busy;
+  hb.style.opacity=jb.style.opacity=busy?0.5:1;
+}
+
+/* ============ PLAYER INPUT PROFILES ============ */
+// solo gets every scheme at once. in a race the keyboard is split.
+const PROFILES=[
+  { name:'P1', fur:'#ffb84d', dark:'#d18f2e', keys:'ARROWS + SHIFT',
+    L:()=>keys['ArrowLeft']||touch.left||touch.back||slideDir()<0,
+    R:()=>keys['ArrowRight']||tiltDir()>0||slideDir()>0||touch.right,
+    J:()=>keys['ArrowUp']||touch.jump,
+    S:()=>keys['Shift']||touch.sprint||tiltSprint(),
+    D:()=>keys['ArrowDown']||touch.down,
+    C:()=>keys['ArrowDown']||touch.down||tiltCrouch() },
+  { name:'P2', fur:'#c98cff', dark:'#9a5fd6', keys:'W A S D + Q',
+    L:()=>keys['a']||keys['A'], R:()=>keys['d']||keys['D'],
+    J:()=>keys['w']||keys['W'], S:()=>keys['q']||keys['Q'],
+    D:()=>keys['s']||keys['S'], C:()=>keys['s']||keys['S'] }
+];
+const SOLO={ name:'P1', fur:'#ffb84d', dark:'#d18f2e', keys:'ARROWS / WASD',
+  L:()=>L(), R:()=>R(), J:()=>J(), S:()=>SPR(), D:()=>D(), C:()=>CROUCH() };
+let players=1;
+
 /* ============ TILT STEERING ============ */
 const TILT_WALK=6, TILT_SPRINT=17, TILT_CROUCH=9, TILT_FULL=26;
 const tilt={on:false,flip:false,have:false,bound:false,val:0,neutral:0,
@@ -653,13 +879,24 @@ const G={mode:'menu',world:0,level:0,lv:null,cam:0,t:0,paused:false,
 
 function startLevel(w,l){
   G.world=w; G.level=l; G.lv=genLevel(w,l); G.cam=0; G.t=0; G.coinsGot=0;
-  G.trail=[]; G.parts=[]; G.bullets=[]; G.pickups=[]; G.paused=false;
+  G.parts=[]; G.bullets=[]; G.pickups=[]; G.paused=false;
   const W=WORLDS[w];
-  G.cat={x:60,y:G.lv.GY-30,vx:0,vy:0,w:22,h:CH_STAND,ground:false,crouch:false,
-    wings:!!W.alwaysWings,wingT:W.alwaysWings?1e9:0,suit:false,suitT:0,
-    face:1,anim:0,step:0,sprinting:false,
-    wallL:false,wallR:false,wallSlide:false,wallDir:0,kick:0,kickVx:0,jPrev:false,
-    rising:false,jumpFull:false,fullCombo:0,flip:false,flipAng:0,pound:false};
+  let roster, remoteIdx=-1;
+  if(players==='online' && netLive()){
+    const me = net.host?0:1;
+    remoteIdx = 1-me;
+    roster = [0,1].map(i=>({...PROFILES[i], ...(i===me?{L:SOLO.L,R:SOLO.R,J:SOLO.J,S:SOLO.S,D:SOLO.D,C:SOLO.C}:{})}));
+  } else roster = players===1 ? [SOLO] : PROFILES.slice(0,players);
+  G.cats = roster.map((prof,i)=>({
+    idx:i, in:prof, remote:i===remoteIdx, fur:prof.fur, furDark:prof.dark, trail:[],
+    x:60+i*26, y:G.lv.GY-30-i*4, vx:0, vy:0, w:22, h:CH_STAND,
+    ground:false, crouch:false, down:0, tether:0,
+    wings:!!W.alwaysWings, wingT:W.alwaysWings?1e9:0, suit:false, suitT:0,
+    face:1, anim:0, step:0, sprinting:false,
+    wallL:false, wallR:false, wallSlide:false, wallDir:0, kick:0, kickVx:0, jPrev:false,
+    rising:false, jumpFull:false, fullCombo:0, flip:false, flipAng:0, pound:false
+  }));
+  G.cat=G.cats[0];
   G.mouse={x:Math.min(-260, 60-chase().trail),y:G.lv.GY-52,w:64,h:52,anim:0,rear:false};
   G.mode='play';
   hud.classList.add('on');
@@ -680,8 +917,134 @@ function startLevel(w,l){
 const GRAV=0.62, MAXFALL=11, BSPD=4.3, CH_STAND=18, CH_CROUCH=11;
 
 function step_(){
-  const lv=G.lv,c=G.cat,W=WORLDS[G.world];
+  stepWorld();
+  for(const c of G.cats){
+    if(c.remote){                                  // driven by the network
+      if(c.netX!==undefined){
+        if(Math.abs(c.netX-c.x)>120||Math.abs(c.netY-c.y)>120){
+          c.x=c.netX; c.y=c.netY;                  // too far gone to interpolate
+        }else{
+          c.x += (c.netX-c.x)*0.34;                // smooth over packet gaps
+          c.y += (c.netY-c.y)*0.34;
+        }
+      }
+      if(c.wings&&c.wingT>0){ c.trail.unshift({x:c.x+8,y:c.y+9});
+        if(c.trail.length>46) c.trail.pop(); }
+      else if(c.trail.length) c.trail.pop();
+      continue;
+    }
+    if(c.down>0){                                  // knocked out, waiting to rejoin
+      c.down--; if(c.down===0) reviveCat(c);
+      continue;
+    }
+    const r=stepCat(c);
+    if(r==='win'){ if(netLive()) netSend({t:'win'}); return finishRace(c); }
+    if(r){
+      if(G.cats.length===1) return lose(r[0],r[1]);
+      knockDown(c,r[0]);
+      if(netLive()) netSend({t:'dead'});
+    }
+  }
+  if(netLive() && G.t%3===0){                      // ~20Hz state, cheap ping every 2s
+    const me=G.cats.find(k=>!k.remote); if(me) sendCat(me);
+    if(net.host && G.t%10===0) netSend({t:'mouse',x:Math.round(G.mouse.x)});
+    if(G.t%90===(net.host?0:45)) netSend({t:'sync',
+      b:G.lv.boxes.map(b=>b.hit?'1':'0').join(''),
+      g:G.lv.gunners.map(g=>g.dead?'1':'0').join('')});
+    if(G.t%120===0) netSend({t:'ping',s:performance.now()});
+  }
+  stepAfter();
+}
+function knockDown(c,why){
+  c.down=80; c.downWhy=why; c.wings=false; c.wingT=0; c.trail.length=0;
+  sfx(300,70,0.35,'sawtooth',0.2);
+  for(let i=0;i<18;i++) G.parts.push({x:c.x+11,y:c.y+9,
+    vx:(Math.random()-.5)*6,vy:-Math.random()*4,life:34,c:c.fur});
+}
+function reviveCat(c){
+  const lead=G.cats.reduce((q,k)=>k.x>q.x?k:q, G.cats[0]);
+  c.x=Math.max(20,Math.min(lead.x-40, G.lv.goal-60));
+  c.y=G.lv.GY-90; c.vx=0; c.vy=0; c.crouch=false; c.h=CH_STAND;
+  c.pound=false; c.flip=false; c.flipAng=0; c.fullCombo=0; c.tether=26;
+  sfx(500,900,0.2,'triangle',0.16);
+}
+
+function gunnerTouch(c,gn){
+  if(c.vy>0 && c.y+c.h-gn.y<15){
+    gn.dead=true; c.vy=-7.4; sfx(240,90,0.17,'square',0.2);
+    if(netLive()) netSend({t:'gun',i:G.lv.gunners.indexOf(gn)});
+    for(let i=0;i<10;i++) G.parts.push({x:gn.x+10,y:gn.y+12,
+      vx:(Math.random()-.5)*4,vy:-Math.random()*3.5,life:26,c:'#9aa0b5'});
+    return null;
+  }
+  return ['OUCH','A mouse gunner. Land on its head to flatten it, or fly over.'];
+}
+
+function stepWorld(){
   G.t++;
+  const m=G.mouse;
+  m.anim+=0.28;
+  const CH=chase();
+  const trailer=G.cats.reduce((q,k)=>k.x<q.x?k:q, G.cats[0]);   // hounds whoever is last
+  const gap=trailer.x-(m.x+m.w);
+  let mspd=CH.sp+G.lv.diff*CH.dd;
+  if(gap<70) mspd*=0.78;
+  m.x += mspd;
+  const target=trailer.x-CH.trail;
+  if(m.x < target) m.x += (target-m.x)*CH.rate;
+  m.y = G.lv.GY-52 + Math.sin(G.t*0.07)*3;
+  m.rear=false;
+  for(let i=G.parts.length-1;i>=0;i--){
+    const p=G.parts[i]; p.x+=p.vx;p.y+=p.vy;p.vy+=0.22;p.life--;
+    if(p.life<=0) G.parts.splice(i,1);
+  }
+  for(const b of G.lv.boxes) if(b.pop>0) b.pop--;
+  if(WORLDS[G.world].meta && G.t%150===0){
+    G.metaMsg=META_LINES[Math.floor(Math.random()*META_LINES.length)];
+    document.getElementById('meta').textContent='// '+G.metaMsg; }
+}
+function stepAfter(){
+  // camera tracks the leader; stragglers get tethered forward
+  const lead=G.cats.reduce((q,k)=>k.x>q.x?k:q, G.cats[0]);
+  G.cam += ((lead.x-150) - G.cam)*0.12;
+  G.cam=Math.max(0,Math.min(G.lv.goal-VW+120,G.cam));
+  if(G.cats.length>1) for(const c of G.cats){
+    if(c.down>0) continue;
+    if(c.x < G.cam-34){
+      c.x=G.cam+14; c.y=Math.min(c.y,G.lv.GY-80); c.vy=0; c.tether=22;
+      for(let i=0;i<10;i++) G.parts.push({x:c.x+11,y:c.y+9,
+        vx:(Math.random()-.5)*4,vy:(Math.random()-.5)*4,life:20,c:c.fur});
+    } else if(c.tether>0) c.tether--;
+  }
+  const c0=G.cats[0], m2=G.mouse, CH2=chase();
+  const flying0=c0.wings&&c0.wingT>0;
+  const dist=Math.max(0,Math.min(1,(c0.x-(m2.x+m2.w))/Math.min(320,CH2.trail)));
+  const cf=document.getElementById('chaseFill');
+  cf.style.width=(dist*100)+'%';
+  cf.style.background = m2.rear ? (G.t%12<6?'#ff3d9a':'#7a1440')
+    : 'linear-gradient(90deg,#43e08a,#ffd447,#ff3d9a)';
+  document.getElementById('wingPill').classList.toggle('on',flying0);
+  document.getElementById('suitPill').classList.toggle('on',c0.suit);
+  const cp=document.getElementById('comboPill');
+  cp.classList.toggle('on',c0.fullCombo>0);
+  cp.textContent = c0.fullCombo>=2 ? 'FLIP READY' : 'MAX x1';
+  cp.style.background = c0.fullCombo>=2 ? '#ffd447' : '#43e08a';
+  document.getElementById('sprintPill').classList.toggle('on',c0.sprinting);
+  smashBtn.textContent = c0.ground ? 'DUCK' : 'SMASH';
+  const np=document.getElementById('netPing');
+  np.classList.toggle('on', netLive());
+  if(netLive()) np.textContent = (net.host?'HOST':'GUEST')+'  '+net.ping+'ms';
+  if(G.cats.length>1){
+    for(let i=0;i<G.cats.length;i++){
+      const el=document.getElementById('pBar'+i);
+      if(el) el.style.width=Math.min(100,(G.cats[i].x/G.lv.goal)*100)+'%';
+    }
+  }
+}
+
+function stepCat(c){
+  const lv=G.lv,W=WORLDS[G.world];
+  const first = c===G.cats[0];
 
   const flying=c.wings&&c.wingT>0;
 
@@ -692,7 +1055,7 @@ function step_(){
   c.wallR = !c.ground && probe(3);
 
   // jump edge detection
-  const jNow=J(), jPress=jNow&&!c.jPrev; c.jPrev=jNow;
+  const jNow=c.in.J(), jPress=jNow&&!c.jPrev; c.jPrev=jNow;
 
   // --- crouch: Down on the ground shrinks the cat under incoming fire ---
   const headroom=()=>{                       // is there room to stand back up?
@@ -705,14 +1068,14 @@ function step_(){
     c.crouch=true; c.y+=CH_STAND-CH_CROUCH; c.h=CH_CROUCH; };
   const goStand=()=>{ if(!c.crouch||!headroom()) return false;
     c.crouch=false; c.y-=CH_STAND-CH_CROUCH; c.h=CH_STAND; return true; };
-  if(CROUCH()&&c.ground&&!flying&&!c.pound) goCrouch(); else goStand();
+  if(c.in.C()&&c.ground&&!flying&&!c.pound) goCrouch(); else goStand();
 
   // horizontal — instant response, no ramp-up
-  const sprint=SPR();
+  const sprint=c.in.S();
   const spd = c.crouch ? 1.5 : (flying ? (sprint?7.4:5.4) : (sprint?5.7:3.3));
   c.sprinting=sprint&&!c.crouch;
   let dir=0;
-  if(L()) dir=-1; if(R()) dir=1; if(L()&&R()) dir=c.face;
+  if(c.in.L()) dir=-1; if(c.in.R()) dir=1; if(c.in.L()&&c.in.R()) dir=c.face;
   c.vx = dir*spd;
   if(dir) c.face=dir;
   if(c.kick>0){ c.kick--; c.vx=c.kickVx; }   // wall push-off overrides input briefly
@@ -723,19 +1086,19 @@ function step_(){
   // vertical
   c.wallSlide=false;
   // down-smash starts from any airborne state, flight included
-  if(D()&&!c.ground&&!c.pound){
+  if(c.in.D()&&!c.ground&&!c.pound){
     c.pound=true; c.vy=12; c.rising=false; c.jumpFull=false; c.fullCombo=0;
     c.flip=false; c.flipAng=0;
     sfx(950,170,0.16,'sawtooth',0.19);
   }
-  if(c.pound&&flying&&!D()) c.pound=false;   // release Down to pull out of the dive
+  if(c.pound&&flying&&!c.in.D()) c.pound=false;   // release Down to pull out of the dive
 
   if(c.pound){
     c.vy=Math.max(c.vy,12);
     if(G.t%2===0) G.parts.push({x:c.x+3+Math.random()*16,y:c.y,
       vx:0,vy:-2.2,life:12,c:flying?'#ffd447':'#dfe6ff'});
   }else if(flying){
-    if(J()){ c.vy-=0.85; if(G.t%3===0) puff(c.x,c.y+14); }
+    if(c.in.J()){ c.vy-=0.85; if(G.t%3===0) puff(c.x,c.y+14); }
     c.vy+=0.24; c.vy=Math.max(-6.2,Math.min(6.2,c.vy));
     c.rising=false;
   }else{
@@ -813,12 +1176,16 @@ function step_(){
     if(hit(c,b)){
       if(c.vy<0 || c.pound){
         b.hit=true; b.pop=12;
+        if(netLive()) netSend({t:'box',i:lv.boxes.indexOf(b)});
         if(c.pound){ c.vy=-5.5; c.pound=false;
           if(!(c.wings&&c.wingT>0)){ c.rising=true; c.jumpFull=false; } }
         else c.vy=1.5;
         // eject the suit — it hovers above the box and must be jumped into
-        G.pickups.push({x:b.x+2,y:b.y-4,vx:(Math.random()-.5)*1.1,vy:-3.6,
+        const pvx=(Math.random()-.5)*1.1;
+        const pid=(net.host?'h':'g')+(net.pkSeq++);
+        G.pickups.push({id:pid,x:b.x+2,y:b.y-4,vx:pvx,vy:-3.6,
           w:20,h:20,kind:b.kind,life:b.kind==='suit'?620:430,t:0,rest:b.y-22});
+        if(netLive()) netSend({t:'pk',id:pid,x:b.x+2,y:b.y-4,vx:pvx,k:b.kind,r:b.y-22});
         sfx(b.kind==='suit'?300:520, b.kind==='suit'?900:1100, 0.22,'triangle',0.18);
         for(let i=0;i<14;i++) G.parts.push({x:b.x+12,y:b.y+12,
           vx:(Math.random()-.5)*5,vy:-Math.random()*4-1,life:32,
@@ -839,11 +1206,14 @@ function step_(){
 
   // floating suits — arc up out of the box, hover, expire if missed
   for(let i=G.pickups.length-1;i>=0;i--){
-    const pk=G.pickups[i]; pk.t++;
-    if(pk.y>pk.rest){ pk.vy+=0.20; }                 // still rising to hover height
-    else { pk.vy*=0.86; pk.vy+=Math.sin(pk.t*0.09)*0.055; pk.vx*=0.94; }
-    pk.x+=pk.vx; pk.y+=pk.vy;
-    if(--pk.life<=0 || pk.y>VH+40){ G.pickups.splice(i,1); continue; }
+    const pk=G.pickups[i];
+    if(first){
+      pk.t++;
+      if(pk.y>pk.rest){ pk.vy+=0.20; }               // still rising to hover height
+      else { pk.vy*=0.86; pk.vy+=Math.sin(pk.t*0.09)*0.055; pk.vx*=0.94; }
+      pk.x+=pk.vx; pk.y+=pk.vy;
+      if(--pk.life<=0 || pk.y>VH+40){ G.pickups.splice(i,1); continue; }
+    }
     if(hit(c,pk)){
       if(pk.kind==='suit'){ c.suit=true; c.suitT=1500; sfx(340,1300,0.34,'triangle',0.24); }
       else{ c.wings=true; c.wingT=Math.max(c.wingT,600);
@@ -851,15 +1221,18 @@ function step_(){
       for(let k=0;k<18;k++) G.parts.push({x:pk.x+10,y:pk.y+10,
         vx:(Math.random()-.5)*6,vy:(Math.random()-.5)*6,life:30,
         c:['#ff3d9a','#ffd447','#43e08a','#5ad2ff','#b06bff'][k%5]});
+      if(netLive()&&pk.id) netSend({t:'pkgo',id:pk.id});
       G.pickups.splice(i,1);
     }
   }
 
   // gunners
   for(const gn of lv.gunners){
-    if(gn.flash>0) gn.flash--;
+    if(first&&gn.flash>0) gn.flash--;
     if(gn.dead) continue;
     if(Math.abs(gn.x-c.x)>400) continue;
+    if(!first){ if(hit(c,gn)) return gunnerTouch(c,gn); continue; }
+    if(netLive()&&!net.host){ if(hit(c,gn)) return gunnerTouch(c,gn); continue; }
     // aim at the cat, leading the shot more in later worlds
     const ox=gn.x+9, oy=gn.y+11;
     let dx=(c.x+c.w/2)-ox, dy=(c.y+c.h/2)-oy;
@@ -874,97 +1247,57 @@ function step_(){
     gn.dir = Math.cos(gn.aim)>0 ? 1 : -1;
     if(--gn.cd<=0){
       gn.cd=gn.rate; gn.flash=7;
-      G.bullets.push({x:ox+Math.cos(gn.aim)*17-6,y:oy+Math.sin(gn.aim)*17-4,
-        vx:Math.cos(gn.aim)*BSPD,vy:Math.sin(gn.aim)*BSPD,
-        w:13,h:9,anim:Math.random()*6});
+      const bx=ox+Math.cos(gn.aim)*17-6, by=oy+Math.sin(gn.aim)*17-4;
+      const bvx=Math.cos(gn.aim)*BSPD, bvy=Math.sin(gn.aim)*BSPD;
+      G.bullets.push({x:bx,y:by,vx:bvx,vy:bvy,w:13,h:9,anim:Math.random()*6});
+      if(netLive()&&net.host) netSend({t:'shot',x:Math.round(bx),y:Math.round(by),
+        vx:Math.round(bvx*100)/100,vy:Math.round(bvy*100)/100});
       sfx(700,220,0.09,'square',0.1);
     }
     if(hit(c,gn)){
       if(c.vy>0 && c.y+c.h-gn.y<15){          // stomp
         gn.dead=true; c.vy=-7.4; sfx(240,90,0.17,'square',0.2);
+        if(netLive()) netSend({t:'gun',i:lv.gunners.indexOf(gn)});
         for(let i=0;i<10;i++) G.parts.push({x:gn.x+10,y:gn.y+12,
           vx:(Math.random()-.5)*4,vy:-Math.random()*3.5,life:26,c:'#9aa0b5'});
-      }else return lose('OUCH','A mouse gunner. Land on its head to flatten it, or fly over.');
+      }else return ['OUCH','A mouse gunner. Land on its head to flatten it, or fly over.'];
     }
   }
   // fired mice
   for(let i=G.bullets.length-1;i>=0;i--){
-    const b=G.bullets[i]; b.x+=b.vx; b.y+=b.vy; b.anim+=0.4;
-    if(b.x<G.cam-90||b.x>G.cam+VW+90||b.y<-60||b.y>VH+60){ G.bullets.splice(i,1); continue; }
-    if(hit(c,b)) return lose('SHOT','A gun-fired mouse hit you. The gunners track your position — keep moving or flatten them from above.');
+    const b=G.bullets[i];
+    if(first){ b.x+=b.vx; b.y+=b.vy; b.anim+=0.4;
+      if(b.x<G.cam-90||b.x>G.cam+VW+90||b.y<-60||b.y>VH+60){ G.bullets.splice(i,1); continue; } }
+    if(hit(c,b)) return ['SHOT','A gun-fired mouse hit you. The gunners track your position — keep moving or flatten them from above.'];
   }
 
   // hazards
   for(const h of lv.hazards){
     if(!hit(c,h)) continue;
-    if(h.t==='water'){ if(c.suit) continue; return lose('SOAKED','No dive suit. Water world does not do second chances — find a blue box first.'); }
+    if(h.t==='water'){ if(c.suit) continue; return ['SOAKED','No dive suit. Water world does not do second chances — find a blue box first.']; }
     if(h.t==='rainbow' && flying) continue;
-    return lose('OUCH', hazardMsg(h.t));
+    return ['OUCH',hazardMsg(h.t)];
   }
 
   // fell out
-  if(c.y>VH+70) return lose('FELL','You cleared both walls on the way down. Hold toward a pit wall while falling, then hit space to kick off it.');
+  if(c.y>VH+70) return ['FELL','You cleared both walls on the way down. Hold toward a pit wall while falling, then hit space to kick off it.'];
 
   // trail
   if(flying){
-    G.trail.unshift({x:c.x+8,y:c.y+9});
-    if(G.trail.length>46) G.trail.pop();
-  }else if(G.trail.length) G.trail.pop();
+    c.trail.unshift({x:c.x+8,y:c.y+9});
+    if(c.trail.length>46) c.trail.pop();
+  }else if(c.trail.length) c.trail.pop();
 
-  // mouse
+  // mouse — can only bite you down in its own lane
   const m=G.mouse;
-  m.anim+=0.28;
-  const CH=chase();
-  const gap=c.x-(m.x+m.w);
-  let mspd=CH.sp+lv.diff*CH.dd;
-  if(gap<70) mspd*=0.78;                        // loses steam right as it closes in
-  m.x += mspd;
-  const target=c.x-CH.trail;
-  if(m.x < target) m.x += (target-m.x)*CH.rate;
-  m.y = lv.GY-52 + Math.sin(G.t*0.07)*3;
-
-  // it only gets you if you're actually down in the bite zone
-  const bite = m.x+m.w > c.x+12;
-  const clear = (c.y+c.h) < (m.y+8);            // jumped or flew over its head
-  m.rear = false;
-  if(bite){
-    if(clear){ m.x=Math.min(m.x, c.x+12-m.w); m.rear=true;   // rears up, can't pass you
+  if(m.x+m.w > c.x+12){
+    if((c.y+c.h) < (m.y+8)){ m.x=Math.min(m.x, c.x+12-m.w); m.rear=true;
       if(G.t%9===0) sfx(200,140,0.07,'sawtooth',0.07); }
-    else return lose('CAUGHT','The mouse got you. Jump its head to buy a moment — but you still have to outrun it.');
+    else return ['CAUGHT','The mouse got you. Jump its head to buy a moment — but you still have to outrun it.'];
   }
-
-  // particles
-  for(let i=G.parts.length-1;i>=0;i--){
-    const p=G.parts[i]; p.x+=p.vx;p.y+=p.vy;p.vy+=0.22;p.life--;
-    if(p.life<=0) G.parts.splice(i,1);
-  }
-  for(const b of lv.boxes) if(b.pop>0) b.pop--;
-
-  // meta chatter
-  if(W.meta && G.t%150===0){ G.metaMsg=META_LINES[Math.floor(Math.random()*META_LINES.length)];
-    document.getElementById('meta').textContent='// '+G.metaMsg; }
-
-  // camera
-  G.cam += ((c.x-150) - G.cam)*0.12;
-  G.cam=Math.max(0,Math.min(lv.goal-VW+120,G.cam));
-
-  // chase bar
-  const dist=Math.max(0,Math.min(1,(c.x-(m.x+m.w))/Math.min(320,CH.trail)));
-  const cf=document.getElementById('chaseFill');
-  cf.style.width=(dist*100)+'%';
-  cf.style.background = m.rear ? (G.t%12<6?'#ff3d9a':'#7a1440')
-    : 'linear-gradient(90deg,#43e08a,#ffd447,#ff3d9a)';
-  document.getElementById('wingPill').classList.toggle('on',flying);
-  document.getElementById('suitPill').classList.toggle('on',c.suit);
-  const cp=document.getElementById('comboPill');
-  cp.classList.toggle('on',c.fullCombo>0);
-  cp.textContent = c.fullCombo>=2 ? 'FLIP READY' : 'MAX x1';
-  cp.style.background = c.fullCombo>=2 ? '#ffd447' : '#43e08a';
-  document.getElementById('sprintPill').classList.toggle('on',c.sprinting);
-  smashBtn.textContent = c.ground ? 'DUCK' : 'SMASH';
 
   // goal
-  if(c.x>lv.goal) return win();
+  if(c.x>lv.goal) return 'win';
 }
 function hazardMsg(t){
   return {thorn:'Thorns. The jungle floor is not walkable — stay on the vines.',
@@ -980,7 +1313,7 @@ function puff(x,y){ G.parts.push({x,y,vx:(Math.random()-.5)*2,vy:1.6,life:16,
 
 /* ============ RENDER ============ */
 function draw(){
-  const lv=G.lv,c=G.cat,W=WORLDS[G.world],cam=Math.floor(G.cam);
+  const lv=G.lv,W=WORLDS[G.world],cam=Math.floor(G.cam);
   const g=ctx.createLinearGradient(0,0,0,VH);
   g.addColorStop(0,W.sky[0]); g.addColorStop(1,W.sky[1]);
   ctx.fillStyle=g; ctx.fillRect(0,0,VW,VH);
@@ -1129,9 +1462,34 @@ function draw(){
       vx:0,vy:-0.5,life:14,c:'#ffffff'});
   }
 
+  for(const c of G.cats) drawCat(c,cam);
+
+  // particles
+  for(const p of G.parts){ ctx.globalAlpha=Math.min(1,p.life/18); ctx.fillStyle=p.c;
+    ctx.fillRect(Math.floor(p.x-cam),Math.floor(p.y),3,3); }
+  ctx.globalAlpha=1;
+
+  // progress
+  const prog=Math.max(0,Math.min(1,G.cats.reduce((q,k)=>Math.max(q,k.x),0)/lv.goal));
+  ctx.fillStyle='rgba(0,0,0,.3)'; ctx.fillRect(VW-104,VH-16,92,7);
+  ctx.fillStyle=W.accent; ctx.fillRect(VW-104,VH-16,92*prog,7);
+}
+
+function drawCat(c,cam){
+  if(c.down>0){
+    const x=c.x-cam;
+    ctx.globalAlpha=0.3+0.2*Math.sin(G.t*0.3);
+    ctx.fillStyle=c.fur;
+    ctx.beginPath(); ctx.ellipse(x+11,c.y+9,9,7,0,0,7); ctx.fill();
+    ctx.globalAlpha=1;
+    ctx.fillStyle=c.fur; ctx.font='bold 8px monospace';
+    ctx.fillText(Math.ceil(c.down/60)+'s', x+4, c.y-6);
+    return;
+  }
+  if(c.tether>0 && G.t%6<3) return;   // blink after a tether pull
   // rainbow trail
-  for(let i=G.trail.length-1;i>=0;i--){
-    const t=G.trail[i], a=1-i/G.trail.length;
+  for(let i=c.trail.length-1;i>=0;i--){
+    const t=c.trail[i], a=1-i/c.trail.length;
     const cols=['#ff3d9a','#ff7a2e','#ffd447','#43e08a','#5ad2ff','#b06bff'];
     for(let k=0;k<6;k++){ ctx.globalAlpha=a*0.85; ctx.fillStyle=cols[k];
       ctx.fillRect(t.x-cam-4,t.y-9+k*3.2,8,3.4); }
@@ -1170,8 +1528,8 @@ function draw(){
   const walking=c.ground&&Math.abs(c.vx)>0.25&&!c.crouch;
   const reach=c.sprinting?6.6:4.4;
   const bob=walking?Math.abs(Math.sin(c.step))*1.1:0;
-  const fur=c.suit?'#7ecdf0':'#ffb84d';
-  const furDark=c.suit?'#4d9dc4':'#d18f2e';
+  const fur=c.suit?'#7ecdf0':c.fur;
+  const furDark=c.suit?'#4d9dc4':c.furDark;
   ctx.save(); ctx.translate(cx+11,(c.crouch?cy+2:cy+6)-bob);
   if(c.wallSlide) ctx.scale(c.wallDir<0?1:-1,1);
   else if(c.face<0) ctx.scale(-1,1);
@@ -1228,15 +1586,13 @@ function draw(){
   ctx.fillStyle='#ff8fb8'; ctx.beginPath(); ctx.ellipse(9,-2,1.8,1.4,0,0,7); ctx.fill();
   ctx.restore();
 
-  // particles
-  for(const p of G.parts){ ctx.globalAlpha=Math.min(1,p.life/18); ctx.fillStyle=p.c;
-    ctx.fillRect(Math.floor(p.x-cam),Math.floor(p.y),3,3); }
-  ctx.globalAlpha=1;
 
-  // progress
-  const prog=Math.max(0,Math.min(1,c.x/lv.goal));
-  ctx.fillStyle='rgba(0,0,0,.3)'; ctx.fillRect(VW-104,VH-16,92,7);
-  ctx.fillStyle=W.accent; ctx.fillRect(VW-104,VH-16,92*prog,7);
+  // knocked out / just tethered forward
+  if(c.tether>0 && G.t%4<2){ }
+  if(G.cats.length>1){                       // player badge
+    ctx.fillStyle=c.fur; ctx.font='bold 8px monospace';
+    ctx.fillText(c.in.name, Math.floor(c.x-cam)+4, Math.floor(c.y)-14);
+  }
 }
 
 /* ============ LOOP ============ */
@@ -1265,6 +1621,20 @@ function lose(title,why){
   document.getElementById('meta').classList.remove('on');
   show('pLose'); return true;
 }
+function finishRace(c){
+  if(G.cats.length===1) return win();
+  G.mode='over'; musicOff(); sfx(660,1320,0.5,'triangle',0.2);
+  save.cleared[key(G.world,G.level)]=true; persist();
+  document.getElementById('winStat').innerHTML =
+    `<b style="color:${c.fur}">${c.in.name} WINS</b> — ${WORLDS[G.world].name} ${G.world+1}-${G.level+1}.`;
+  hud.classList.remove('on'); document.getElementById('touch').classList.remove('on');
+  document.getElementById('meta').classList.remove('on');
+  sprintBtn.classList.remove('on'); smashBtn.classList.remove('on');
+  backBtn.classList.remove('on'); recenterBtn.classList.remove('on');
+  document.getElementById('btnNext').textContent='NEXT LEVEL';
+  show('pWin');
+  return true;
+}
 function win(){
   G.mode='over'; musicOff();
   sfx(660,1320,0.5,'triangle',0.2);
@@ -1286,7 +1656,7 @@ function win(){
 function togglePause(){
   G.paused=!G.paused;
   if(G.paused){ musicOff(); show('pPause'); }
-  else{ hideAll(); if(G.cat.wings&&G.cat.wingT>0) musicOn(); }
+  else{ hideAll(); if(G.cats.some(k=>k.wings&&k.wingT>0)) musicOn(); }
 }
 
 function buildWorlds(){
@@ -1307,18 +1677,53 @@ function openWorld(w){
   const W=WORLDS[w];
   document.getElementById('lvlEyebrow').textContent='world '+(w+1)+' of 8';
   document.getElementById('lvlTitle').textContent=W.name;
-  document.getElementById('lvlBlurb').textContent=W.blurb;
+  document.getElementById('lvlBlurb').textContent =
+    (players==='online'&&netLive()&&!net.host) ? 'Connected. The host picks the level — sit tight.'
+    : W.blurb;
   const el=document.getElementById('lvlGrid'); el.innerHTML='';
   for(let l=0;l<8;l++){
     const open=levelOpen(w,l), done=isClear(w,l);
     const d=document.createElement('div');
     d.className='lcard'+(done?' done':'')+(open?'':' locked');
     d.textContent=done?'★':(open?(l+1):'🔒');
-    if(open) d.onclick=()=>startLevel(w,l);
+    if(open) d.onclick=()=>{
+      if(players==='online'){
+        if(!netLive()) return;
+        if(!net.host) return;                       // guest follows the host
+        netSend({t:'start',w,l,c:chaseMode});
+      }
+      startLevel(w,l);
+    };
     el.appendChild(d);
   }
   show('pLevels');
 }
+
+function playersUI(){
+  const b=document.getElementById('btnPlayers');
+  b.textContent = players===1?'1 — SOLO' : players===2?'2 — RACE' : 'ONLINE';
+  b.classList.toggle('act',players!==1);
+  document.getElementById('playersNote').textContent =
+    players===1 ? 'arrows or wasd, tilt, or the buttons'
+    : players===2 ? 'P1 arrows + shift  ·  P2 wasd + q  ·  same keyboard'
+    : 'race a friend anywhere — peer to peer, no account';
+  document.getElementById('raceBars').classList.toggle('on',players!==1);
+  if(players!=='online'){ killPeer(); net.on=false; net.state='off'; }
+  else net.on=true;
+  try{ sessionStorage.setItem('wingcat-players',String(players)); }catch(e){}
+  netUI();
+}
+try{ const v=sessionStorage.getItem('wingcat-players');
+     if(v==='1'||v==='2') players=parseInt(v,10); }catch(e){}
+const PLAYER_CYCLE=[1,2,'online'];
+document.getElementById('btnPlayers').onclick=()=>{
+  players=PLAYER_CYCLE[(PLAYER_CYCLE.indexOf(players)+1)%3]; playersUI(); };
+document.getElementById('btnHost').onclick=()=>hostGame();
+document.getElementById('btnJoin').onclick=()=>joinGame(document.getElementById('netInput').value);
+document.getElementById('netInput').addEventListener('keydown',e=>{
+  if(e.key==='Enter') joinGame(e.target.value); });
+addEventListener('beforeunload',()=>{ if(netLive()) netSend({t:'bye'}); });
+playersUI();
 
 function chaseUI(){
   const b=document.getElementById('btnChase'), b2=document.getElementById('btnChase2');
